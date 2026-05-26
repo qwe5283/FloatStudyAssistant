@@ -6,7 +6,5 @@
 
 解决思路：改用无障碍服务读取考试界面内容，并使用ADB权限（Shizuku）高频读取窗口快照（dumpsys window windows）来统计FLAG_SECURE窗口数量，当FLAG_SECURE窗口数量减少时，隐藏自己的悬浮窗，从而避免被屏幕抓拍捕获。
 
-点此查看实现效果
-
-
+在`docs/2月23日(1).mp4`查看实现效果
 
