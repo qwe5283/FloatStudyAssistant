@@ -47,6 +47,7 @@ import org.json.JSONObject;
 import java.util.Arrays;
 
 public class FloatingWidgetService extends Service {
+    private static final long SECURE_COUNT_POLL_INTERVAL_MS = 500L;
     private WindowManager windowManager;
 
     private int modelIndex, promptIndex = 0;
@@ -161,12 +162,7 @@ public class FloatingWidgetService extends Service {
     public void onDestroy() {
         super.onDestroy();
         HideAllWindows();
-        secureCounterRunning = false;
-        try {
-            secureCountListenerThread.join(); // 等待后台线程关闭
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        ShutdownSecureCountListener();
         if (floatToggleBtnView != null && floatToggleBtnView.getParent() != null) windowManager.removeView(floatToggleBtnView);
         isActive = false;
     }
@@ -1158,7 +1154,6 @@ public class FloatingWidgetService extends Service {
 
     private void ExitHideMode() throws InterruptedException {
         ShutdownSecureCountListener();
-        secureCountListenerThread.join(); // 等待线程结束
         // 显示按钮
         TextView hideBtn = popupMenuView.findViewById(R.id.hide_btn);
         hideBtn.setVisibility(View.VISIBLE);
@@ -1189,12 +1184,17 @@ public class FloatingWidgetService extends Service {
     Thread secureCountListenerThread;
 
     private void LauncherSecureCountListener(){
+        if (secureCountListenerThread != null && secureCountListenerThread.isAlive()) {
+            return;
+        }
+        secureCounterRunning = true;
         secureCountListenerThread = new Thread(() -> {
             Log.d("TAG", "启动监听进程");
             try {
                 AdbCommandHelper commandHelper = new AdbCommandHelper(this);
                 while (secureCounterRunning) {
                     setOuterSecureWindowCount(commandHelper.GetOuterSecureWindowCount());
+                    Thread.sleep(SECURE_COUNT_POLL_INTERVAL_MS);
                 }
             }catch (RemoteException e){
                 Log.d("TAG", "Shizuku调用出现错误");
@@ -1211,12 +1211,25 @@ public class FloatingWidgetService extends Service {
             }
             Log.d("TAG", "隐私窗口统计线程结束");
         });
-        secureCounterRunning = true;
         secureCountListenerThread.start();
     }
 
     private void ShutdownSecureCountListener(){
         secureCounterRunning = false;
+        if (secureCountListenerThread != null) {
+            Thread listenerThread = secureCountListenerThread;
+            listenerThread.interrupt();
+            if (Thread.currentThread() != listenerThread) {
+                try {
+                    listenerThread.join(SECURE_COUNT_POLL_INTERVAL_MS * 2);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            if (!listenerThread.isAlive()) {
+                secureCountListenerThread = null;
+            }
+        }
     }
 
 }
